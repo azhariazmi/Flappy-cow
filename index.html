@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#8bdcfa">
+<meta name="description" content="Flappy Cow - A cute and addictive cartoon cow flying game. Tap to fly, dodge pipes and beat your high score!">
+<title>Flappy Cow 🐮 - Moo Adventure</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='85'%3E🐮%3C/text%3E%3C/svg%3E">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+font-family:system-ui,sans-serif;
+background:#8bdcfa;
+overflow:hidden;
+touch-action:none;
+user-select:none;
+-webkit-user-select:none;
+}
+.game{
+position:relative;
+width:100%;
+height:100dvh;
+min-height:400px;
+overflow:hidden;
+background:linear-gradient(#73d4fa 0%,#c1f1ff 75%,#8bdc8a 100%);
+}
+canvas{
+width:100%;
+height:100%;
+display:block;
+}
+.top{
+position:absolute;
+top:20px;
+left:0;
+width:100%;
+display:flex;
+justify-content:space-between;
+padding:0 18px;
+pointer-events:none;
+z-index:2;
+}
+.score{
+color:white;
+font-size:27px;
+font-weight:1000;
+text-shadow:2px 3px 0 #388b45,0 0 8px #fff;
+}
+.best{
+color:#fff;
+font-weight:900;
+font-size:13px;
+text-shadow:1px 2px 3px #377a42;
+}
+.panel{
+position:absolute;
+inset:0;
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:5;
+padding:20px;
+}
+.card{
+width:min(330px,90%);
+padding:25px 20px;
+border:5px solid white;
+border-radius:28px;
+background:linear-gradient(145deg,#fff8cf,#fff);
+box-shadow:0 9px 0 #e5a94d,0 15px 30px #276b5a55;
+text-align:center;
+}
+.cow{
+font-size:85px;
+line-height:1.3;
+filter:drop-shadow(0 5px 2px #0002);
+animation:bounce 1.5s infinite ease-in-out;
+}
+@keyframes bounce{
+0%,100%{transform:translateY(0) rotate(-5deg)}
+50%{transform:translateY(-12px) rotate(5deg)}
+}
+h1{
+font-size:35px;
+font-weight:1000;
+color:#4c9d53;
+text-shadow:2px 3px 0 #c5ed9c;
+margin:5px 0;
+}
+.subtitle{
+color:#777;
+font-size:14px;
+font-weight:700;
+margin-bottom:17px;
+}
+button{
+border:0;
+border-radius:50px;
+padding:14px 35px;
+font-size:18px;
+font-weight:1000;
+color:white;
+background:linear-gradient(135deg,#ff9e42,#ff623c);
+box-shadow:0 5px 0 #d64b2c;
+cursor:pointer;
+}
+button:active{
+transform:translateY(4px);
+box-shadow:0 1px 0 #d64b2c;
+}
+.instructions{
+font-size:12px;
+color:#999;
+margin-top:17px;
+font-weight:700;
+}
+.result{
+font-size:17px;
+font-weight:900;
+color:#555;
+margin:12px 0 20px;
+line-height:1.8;
+}
+.hidden{display:none!important}
+.hint{
+position:absolute;
+bottom:55px;
+width:100%;
+text-align:center;
+font-size:14px;
+font-weight:900;
+color:white;
+text-shadow:1px 2px 3px #347a49;
+pointer-events:none;
+}
+.credit{
+position:absolute;
+bottom:12px;
+width:100%;
+text-align:center;
+font-size:10px;
+color:#fff;
+font-weight:800;
+text-shadow:1px 1px 3px #397d52;
+pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<div class="game" id="game">
+<canvas id="canvas"></canvas>
+
+<div class="top">
+<div class="score" id="score">0</div>
+<div class="best">🏆 BEST: <span id="best">0</span></div>
+</div>
+
+<div class="hint" id="hint">TAP ANYWHERE TO FLY! 🐮</div>
+<div class="credit">MOO ADVENTURE · FLAPPY COW</div>
+
+<div class="panel" id="startPanel">
+<div class="card">
+<div class="cow">🐮</div>
+<h1>FLAPPY COW</h1>
+<div class="subtitle">Moo! Let's fly through the sky!</div>
+<button id="startBtn">▶ PLAY NOW</button>
+<div class="instructions">TAP · CLICK · SPACE TO FLY</div>
+</div>
+</div>
+
+<div class="panel hidden" id="overPanel">
+<div class="card">
+<div class="cow">🐮</div>
+<h1>GAME OVER!</h1>
+<div class="subtitle">Oops! Your cow went MOO!</div>
+<div class="result">
+⭐ SCORE: <span id="finalScore">0</span><br>
+🏆 BEST: <span id="finalBest">0</span>
+</div>
+<button id="restartBtn">↻ PLAY AGAIN</button>
+<div class="instructions">Don't give up, little cow!</div>
+</div>
+</div>
+</div>
+
+<script>
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+
+const $=id=>document.getElementById(id);
+
+let W,H,dpr;
+let state="ready";
+let score=0;
+let best=Number(localStorage.getItem("flappyCowBest"))||0;
+let frame=0;
+let pipes=[];
+let clouds=[];
+let particles=[];
+let audioCtx=null;
+
+const cow={
+x:0,y:0,vy:0,size:40,rotation:0
+};
+
+const gravity=.39;
+const jump=-7.1;
+const pipeWidth=65;
+const gap=170;
+const groundHeight=55;
+
+$("best").textContent=best;
+
+function resize(){
+dpr=Math.min(window.devicePixelRatio||1,2);
+W=canvas.clientWidth;
+H=canvas.clientHeight;
+canvas.width=W*dpr;
+canvas.height=H*dpr;
+ctx.setTransform(dpr,0,0,dpr,0,0);
+
+cow.x=Math.max(65,W*.25);
+cow.size=Math.max(35,Math.min(45,W*.105));
+
+if(state==="ready"){
+cow.y=H*.43;
+}
+}
+window.addEventListener("resize",resize);
+resize();
+
+function sound(freq=500,duration=.08,type="sine"){
+try{
+audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();
+if(audioCtx.state==="suspended")audioCtx.resume();
+const osc=audioCtx.createOscillator();
+const gain=audioCtx.createGain();
+osc.type=type;
+osc.frequency.value=freq;
+gain.gain.setValueAtTime(.09,audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);
+osc.connect(gain);
+gain.connect(audioCtx.destination);
+osc.start();
+osc.stop(audioCtx.currentTime+duration);
+}catch(e){}
+}
+
+function makeClouds(){
+clouds=[];
+for(let i=0;i<7;i++){
+clouds.push({
+x:Math.random()*W,
+y:40+Math.random()*(H*.55),
+size:25+Math.random()*30,
+speed:.25+Math.random()*.35
+});
+}
+}
+makeClouds();
+
+function reset(){
+score=0;
+frame=0;
+pipes=[];
+particles=[];
+cow.y=H*.43;
+cow.vy=0;
+cow.rotation=0;
+$("score").textContent=0;
+$("hint").classList.remove("hidden");
+}
+
+function start(){
+reset();
+state="playing";
+$("startPanel").classList.add("hidden");
+$("overPanel").classList.add("hidden");
+$("hint").classList.remove("hidden");
+flap();
+}
+
+function flap(){
+if(state!=="playing")return;
+cow.vy=jump;
+sound(550,.09);
+for(let i=0;i<3;i++){
+particles.push({
+x:cow.x-15,
+y:cow.y+10,
+vx:-Math.random()*2,
+vy:Math.random()*2,
+life:20,
+emoji:"✨"
+});
+}
+}
+
+function endGame(){
+if(state!=="playing")return;
+state="over";
+sound(150,.35,"triangle");
+best=Math.max(best,score);
+localStorage.setItem("flappyCowBest",best);
+$("best").textContent=best;
+$("finalScore").textContent=score;
+$("finalBest").textContent=best;
+$("overPanel").classList.remove("hidden");
+$("hint").classList.add("hidden");
+}
+
+function createPipe(){
+const margin=85;
+const minY=margin;
+const maxY=Math.max(margin,H-groundHeight-gap-margin);
+const top=minY+Math.random()*(maxY-minY);
+
+pipes.push({
+x:W+10,
+top:top,
+bottom:top+gap,
+passed:false
+});
+}
+
+function addScore(){
+score++;
+$("score").textContent=score;
+sound(850,.1);
+}
+
+function drawCloud(x,y,s){
+ctx.fillStyle="rgba(255,255,255,.85)";
+ctx.beginPath();
+ctx.arc(x,y,s*.48,0,Math.PI*2);
+ctx.arc(x+s*.45,y-s*.25,s*.55,0,Math.PI*2);
+ctx.arc(x+s,y,s*.45,0,Math.PI*2);
+ctx.arc(x+s*.5,y+s*.15,s*.42,0,Math.PI*2);
+ctx.fill();
+}
+
+function drawPipe(p){
+const w=pipeWidth;
+const grad=ctx.createLinearGradient(p.x,0,p.x+w,0);
+grad.addColorStop(0,"#319e45");
+grad.addColorStop(.5,"#76df65");
+grad.addColorStop(1,"#238d3d");
+
+ctx.fillStyle=grad;
+ctx.strokeStyle="#237d36";
+ctx.lineWidth=3;
+
+// Top pipe
+ctx.fillRect(p.x,0,w,p.top-18);
+ctx.strokeRect(p.x,0,w,p.top-18);
+ctx.fillRect(p.x-6,p.top-20,w+12,20);
+ctx.strokeRect(p.x-6,p.top-20,w+12,20);
+
+// Bottom pipe
+ctx.fillRect(p.x,p.bottom+18,w,H-p.bottom-groundHeight);
+ctx.strokeRect(p.x,p.bottom+18,w,H-p.bottom-groundHeight);
+ctx.fillRect(p.x-6,p.bottom,w+12,20);
+ctx.strokeRect(p.x-6,p.bottom,w+12,20);
+
+// Highlights
+ctx.fillStyle="#a8f58d";
+ctx.fillRect(p.x+8,0,6,p.top-22);
+ctx.fillRect(p.x+8,p.bottom+22,6,H-p.bottom-groundHeight);
+}
+
+function drawCow(){
+ctx.save();
+ctx.translate(cow.x,cow.y);
+ctx.rotate(cow.rotation);
+
+const s=cow.size;
+
+// Cute cartoon cow body
+ctx.font=`${s*1.55}px "Apple Color Emoji","Segoe UI Emoji",sans-serif`;
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+ctx.fillText("🐮",0,0);
+
+ctx.restore();
+}
+
+function drawGround(){
+ctx.fillStyle="#80d957";
+ctx.fillRect(0,H-groundHeight,W,groundHeight);
+
+ctx.fillStyle="#48ad47";
+ctx.fillRect(0,H-groundHeight,W,8);
+
+ctx.fillStyle="#b4e879";
+for(let x=0;x<W;x+=22){
+ctx.beginPath();
+ctx.moveTo(x,H-groundHeight+8);
+ctx.lineTo(x+7,H-groundHeight-2);
+ctx.lineTo(x+13,H-groundHeight+8);
+ctx.fill();
+}
+
+ctx.fillStyle="#c58b51";
+ctx.fillRect(0,H-groundHeight+25,W,groundHeight-25);
+ctx.fillStyle="#e6b16b";
+ctx.fillRect(0,H-groundHeight+25,W,5);
+}
+
+function drawBackground(){
+ctx.clearRect(0,0,W,H);
+
+clouds.forEach(c=>{
+if(state==="playing")c.x-=c.speed;
+if(c.x<-100)c.x=W+50;
+drawCloud(c.x,c.y,c.size);
+});
+
+ctx.fillStyle="#a9e8ac";
+ctx.beginPath();
+ctx.moveTo(0,H-groundHeight-25);
+for(let x=0;x<=W;x+=30){
+ctx.lineTo(x,H-groundHeight-25+Math.sin(x*.018)*12);
+}
+ctx.lineTo(W,H);
+ctx.lineTo(0,H);
+ctx.fill();
+}
+
+function update(){
+if(state!=="playing")return;
+
+frame++;
+
+cow.vy+=gravity;
+cow.y+=cow.vy;
+cow.rotation=Math.min(.8,Math.max(-.5,cow.vy*.07));
+
+if(frame%95===1)createPipe();
+
+const speed=Math.min(3.6,2.5+score*.025);
+
+pipes.forEach(p=>{
+p.x-=speed;
+
+if(!p.passed&&p.x+pipeWidth<cow.x){
+p.passed=true;
+addScore();
+}
+
+const hitX=cow.x+safesize()*0.36>p.x&&
+cow.x-safesize()*0.36<p.x+pipeWidth;
+
+const hitY=cow.y-safesize()*.35<p.top||
+cow.y+safesize()*.35>p.bottom;
+
+if(hitX&&hitY)endGame();
+});
+
+pipes=pipes.filter(p=>p.x+pipeWidth+20>0);
+
+if(cow.y-cow.size*.4<0||cow.y+cow.size*.4>H-groundHeight){
+endGame();
+}
+
+particles.forEach(p=>{
+p.x+=p.vx;
+p.y+=p.vy;
+p.life--;
+});
+particles=particles.filter(p=>p.life>0);
+}
+
+function safesize(){
+return cow.size;
+}
+
+function draw(){
+drawBackground();
+
+pipes.forEach(drawPipe);
+
+particles.forEach(p=>{
+ctx.globalAlpha=p.life/20;
+ctx.font="15px sans-serif";
+ctx.fillText(p.emoji,p.x,p.y);
+ctx.globalAlpha=1;
+});
+
+drawCow();
+drawGround();
+
+if(state==="ready"){
+cow.y=H*.43+Math.sin(Date.now()*.004)*7;
+}
+}
+
+function loop(){
+update();
+draw();
+requestAnimationFrame(loop);
+}
+
+function input(e){
+if(e)e.preventDefault();
+
+if(state==="ready"){
+start();
+return;
+}
+
+if(state==="playing"){
+flap();
+}
+}
+
+$("startBtn").addEventListener("click",e=>{
+e.stopPropagation();
+start();
+});
+
+$("restartBtn").addEventListener("click",e=>{
+e.stopPropagation();
+start();
+});
+
+$("game").addEventListener("pointerdown",e=>{
+if(e.target.closest("button"))return;
+input(e);
+});
+
+window.addEventListener("keydown",e=>{
+if(e.code==="Space"||e.code==="ArrowUp"){
+e.preventDefault();
+input(e);
+}
+});
+
+loop();
+</script>
+</body>
+  </html>
+  
